@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "悟空书签同步xbel-ByWebdav",
+  "version": "0.1",
+  "description": "悟空书签同步xbel-ByWebdav - 使用XBEL格式通过WebDAV同步书签，支持123云盘等",
+  "permissions": ["bookmarks", "storage", "alarms"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "悟空书签同步xbel-ByWebdav"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
