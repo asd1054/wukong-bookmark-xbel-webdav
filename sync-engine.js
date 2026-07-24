@@ -358,20 +358,75 @@ export async function replaceLocalFromTree(roots) {
   let cleared = 0;
   const clearErrors = [];
 
+  // 清空函数：递归删除一个容器内的所有子节点
+  async function clearContainer(containerId, label) {
+    let passCleared = 0;
+    const children = await bmGetChildren(containerId);
+    for (const child of children) {
+      await bmRemove(child.id); // bmRemove 递归删除文件夹+内容
+      passCleared++;
+    }
+    return passCleared;
+  }
+
   for (const container of rootContainers) {
+    const label = container.title || container.id;
     try {
-      const children = await bmGetChildren(container.id);
-      for (const child of children) {
-        await bmRemove(child.id); // bmRemove 递归删除文件夹+内容
-        cleared++;
-      }
+      // 第一轮：正常清空
+      cleared += await clearContainer(container.id, label);
     } catch (e) {
-      clearErrors.push(`${container.title || container.id}: ${e.message}`);
+      clearErrors.push(`${label}: ${e.message}`);
+    }
+  }
+
+  // ── 验证清空：检查所有根容器是否确实为空 ──
+  const containersAfter = await bmGetChildren('0');
+  let stillHasChildren = false;
+  for (const c of containersAfter) {
+    const children = await bmGetChildren(c.id);
+    if (children.length > 0) {
+      stillHasChildren = true;
+      console.warn(`[悟空书签] 容器 "${c.title || c.id}" 清空后仍有 ${children.length} 个子节点，重试清空...`);
+    }
+  }
+
+  if (stillHasChildren) {
+    // 第二轮：强制清空残留（包括之前失败的容器）
+    const containersRetry = await bmGetChildren('0');
+    for (const c of containersRetry) {
+      try {
+        const children = await bmGetChildren(c.id);
+        if (children.length > 0) {
+          let retry = 0;
+          for (const child of children) {
+            await bmRemove(child.id);
+            retry++;
+          }
+          cleared += retry;
+          console.log(`[悟空书签] 第二轮清空 "${c.title || c.id}"：删除了 ${retry} 个残留子节点`);
+        }
+      } catch (e) {
+        clearErrors.push(`${c.title || c.id}(重试): ${e.message}`);
+      }
+    }
+  }
+
+  // ── 最终验证 ──
+  const containersFinal = await bmGetChildren('0');
+  for (const c of containersFinal) {
+    const children = await bmGetChildren(c.id);
+    if (children.length > 0) {
+      const titles = children.slice(0, 5).map(ch => ch.title || '(未命名)').join(', ');
+      throw new Error(
+        `清空本地书签失败！容器 "${c.title}" 仍有 ${children.length} 条残留。\n` +
+        `前 5 条: ${titles}\n` +
+        `请关掉 Chrome 自带的「书签同步」功能后重试。`
+      );
     }
   }
 
   if (clearErrors.length) {
-    console.warn('[悟空书签] 清空本地书签时有少量错误:', clearErrors.join('; '));
+    console.warn('[悟空书签] 清空时有个别错误（已通过重试解决）:', clearErrors.join('; '));
   }
 
   // ── 第二步：从 XBEL 树重建 ──
@@ -398,7 +453,6 @@ export async function replaceLocalFromTree(roots) {
           if (cachedId) return cachedId;
           const parentId = await parentResolve();
           if (isTop) {
-            // 顶层文件夹：尝试匹配系统文件夹（书签栏/其他书签等）
             cachedId = await resolveTopParent(n.title);
           } else {
             cachedId = await createFolder(parentId, n.title);
@@ -471,9 +525,27 @@ export async function doSync(cfg, onProgress = null) {
   if (onProgress) onProgress(`【同步 2/3】以云端覆盖本地（${flat.length} 个书签）...`);
   const { built, cleared } = await replaceLocalFromTree(roots);
 
-  // 导出并写回（使用 ETag 防并发）
-  if (onProgress) onProgress('【同步 3/3】写回云端...');
+  // ── 数量一致性检查：导出数必须 ≈ 云端数（差异超过 5% 则中止） ──
+  if (onProgress) onProgress('【同步 3/3】验证并写回云端...');
   const exp = await exportXBEL();
+
+  if (flat.length > 0) {
+    const diff = Math.abs(exp.unique - flat.length);
+    const ratio = diff / flat.length;
+    if (ratio > 0.05) {
+      throw new Error(
+        `数量一致性检查失败！\n` +
+        `→ 云端下载: ${flat.length} 个书签\n` +
+        `→ 本地重建: ${built} 个书签\n` +
+        `→ 导出时发现: ${exp.unique} 个书签（多了 ${exp.unique - flat.length} 个！）\n\n` +
+        `可能原因：\n` +
+        `1. Chrome 自带「书签同步」功能未关闭 → chrome://settings/syncSetup → 关闭「书签」\n` +
+        `2. Edge 或其他浏览器也在同步 → 暂时只在一台设备上操作\n\n` +
+        `请关闭上述功能后，在新的 Chrome 窗口中重新点「同步」。`
+      );
+    }
+  }
+
   await webdavPut(cfg.webdavUrl, cfg.webdavUser, cfg.webdavPass, exp.xml, etag);
   await bgStorage.local.set({ [LAST_SYNC_KEY]: Date.now(), [LAST_SYNC_STATUS_KEY]: 'ok' });
 
