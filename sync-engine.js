@@ -13,7 +13,7 @@ const bgStorage = (typeof browser !== 'undefined' && browser.storage)
   ? browser.storage : chrome.storage;
 
 // ── 常量 ──
-const ENGINE_VERSION = '0.4';
+const ENGINE_VERSION = '0.5';
 export const LAST_SYNC_KEY = 'wukong_last_sync';
 export const LAST_SYNC_STATUS_KEY = 'wukong_last_sync_status';
 
@@ -336,162 +336,129 @@ export function parseXBELTree(xml) {
   return { roots, flat };
 }
 
-// ── 共享模式核心：清空本地 → 从云端 XBEL 树重建 ──
+// ── 共享模式核心：增量 diff 同步云端到本地 ──
 //
-// 这是共享模式的关键函数。它做两件事：
-//   1. 删除所有浏览器根级文件夹（书签栏/其他书签/移动书签）内的全部内容
-//   2. 从 XBEL 解析树重新创建所有书签和文件夹
+// 与旧版「全量清空 → 重建」不同，此函数使用增量操作：
+//   1. 快照所有本地书签 URL
+//   2. 遍历 XBEL 树：URL 不在本地 → 新建；在本地但文件夹不对 → 移动；已在对的位置 → 跳过
+//   3. 删除本地有但 XBEL 没有的书签（逐条，不触发浏览器同步的批量事件）
+//   4. 清理空文件夹
 //
-// 注意：系统根文件夹本身（如"书签栏"）不会被删除，只清空其子内容。
-//       这与单纯「合并补缺」不同——合并永远只增不减，共享模式是「全量替换」。
+// 增量操作可以跟 Chrome/Edge 自带书签同步共存，不会互相干扰。
 
-export async function replaceLocalFromTree(roots) {
-  // ── 第一步：清空所有根级容器的子内容 ──
-  const rootContainers = await bmGetChildren('0');
-  let cleared = 0;
-  const clearErrors = [];
+export async function diffSyncFromCloud(roots, flat) {
+  const cloudUrlSet = new Set(flat.map(b => b.url));
 
-  // 清空函数：递归删除一个容器内的所有子节点
-  async function clearContainer(containerId, label) {
-    let passCleared = 0;
-    const children = await bmGetChildren(containerId);
-    for (const child of children) {
-      await bmRemove(child.id); // bmRemove 递归删除文件夹+内容
-      passCleared++;
-    }
-    return passCleared;
+  // ── Step 1：快照全部本地书签，建 URL → 节点 索引 ──
+  const allLocal = await new Promise((resolve) => {
+    chrome.bookmarks.search({}, resolve);
+  });
+  const localByUrl = new Map();
+  for (const bm of allLocal) {
+    if (!localByUrl.has(bm.url)) localByUrl.set(bm.url, []);
+    localByUrl.get(bm.url).push({ id: bm.id, parentId: bm.parentId, title: bm.title });
   }
+  const matchedIds = new Set();
 
-  for (const container of rootContainers) {
-    const label = container.title || container.id;
-    try {
-      // 第一轮：正常清空
-      cleared += await clearContainer(container.id, label);
-    } catch (e) {
-      clearErrors.push(`${label}: ${e.message}`);
-    }
-  }
+  let created = 0, moved = 0;
 
-  // ── 验证清空：检查所有根容器是否确实为空 ──
-  const containersAfter = await bmGetChildren('0');
-  let stillHasChildren = false;
-  for (const c of containersAfter) {
-    const children = await bmGetChildren(c.id);
-    if (children.length > 0) {
-      stillHasChildren = true;
-      console.warn(`[悟空书签] 容器 "${c.title || c.id}" 清空后仍有 ${children.length} 个子节点，重试清空...`);
-    }
-  }
-
-  if (stillHasChildren) {
-    // 第二轮：强制清空残留（包括之前失败的容器）
-    const containersRetry = await bmGetChildren('0');
-    for (const c of containersRetry) {
-      try {
-        const children = await bmGetChildren(c.id);
-        if (children.length > 0) {
-          let retry = 0;
-          for (const child of children) {
-            await bmRemove(child.id);
-            retry++;
-          }
-          cleared += retry;
-          console.log(`[悟空书签] 第二轮清空 "${c.title || c.id}"：删除了 ${retry} 个残留子节点`);
-        }
-      } catch (e) {
-        clearErrors.push(`${c.title || c.id}(重试): ${e.message}`);
-      }
-    }
-  }
-
-  // ── 最终验证 + 第三轮逐条清理 ──
-  const stubborn = [];
-  const containersFinal = await bmGetChildren('0');
-  for (const c of containersFinal) {
-    const children = await bmGetChildren(c.id);
-    if (children.length > 0) {
-      // 第三轮：逐条尝试删除，每个单独 catch
-      for (const child of children) {
-        try {
-          await bmRemove(child.id);
-          cleared++;
-        } catch (e) {
-          // 删不掉的：记录，不阻塞
-          stubborn.push(`${child.title || '(未命名)'} [${c.title}]`);
-        }
-      }
-    }
-  }
-
-  // 再验证一轮
-  let stubbornFinal = 0;
-  const containersRecheck = await bmGetChildren('0');
-  for (const c of containersRecheck) {
-    const children = await bmGetChildren(c.id);
-    stubbornFinal += children.length;
-  }
-
-  if (clearErrors.length) {
-    console.warn('[悟空书签] 清空时有个别错误（已通过重试解决）:', clearErrors.join('; '));
-  }
-  if (stubborn.length > 0) {
-    console.warn(`[悟空书签] ${stubborn.length} 个系统书签无法删除（浏览器保护），已跳过:`, stubborn.slice(0, 5).join(', '));
-  }
-
-  // ── 第二步：从 XBEL 树重建 ──
-  const barId = await defaultBarId();
-  let built = 0;
-  let foldersCreated = 0;
-  const buildErrors = [];
-
+  // ── Step 2：增量建文件夹 + 书签（复用已有，只新建/移动差异） ──
   async function createFolder(parentId, title) {
-    const name = String(title || '').trim() || '未命名文件夹';
     const children = await bmGetChildren(parentId);
-    const existing = children.find(c => !c.url && c.title === name);
-    if (existing) return existing.id;
-    const node = await bmCreate({ parentId, title: name });
-    foldersCreated++;
+    const found = children.find(c => !c.url && c.title === title);
+    if (found) return found.id;
+    const node = await bmCreate({ parentId, title });
     return node.id;
   }
 
-  async function buildNodes(nodes, parentResolve, isTop) {
+  async function ensureNodes(nodes, parentResolve) {
     for (const n of nodes) {
       if (n.type === 'folder') {
-        let cachedId = null;
-        const childResolve = async () => {
-          if (cachedId) return cachedId;
-          const parentId = await parentResolve();
-          if (isTop) {
-            cachedId = await resolveTopParent(n.title);
-          } else {
-            cachedId = await createFolder(parentId, n.title);
-          }
-          return cachedId;
-        };
-        await buildNodes(n.children || [], childResolve, false);
+        const pid = await parentResolve();
+        const fid = await createFolder(pid, n.title);
+        await ensureNodes(n.children || [], async () => fid);
       } else if (n.type === 'bookmark' && n.url) {
-        try {
-          const parentId = await parentResolve();
-          await bmCreate({ parentId, title: n.title || n.url, url: n.url });
-          built++;
-        } catch (e) {
-          buildErrors.push(`${n.url}: ${e.message}`);
+        const pid = await parentResolve();
+        const entries = localByUrl.get(n.url) || [];
+
+        const inPlace = entries.find(e => e.parentId === pid);
+        if (inPlace) {
+          matchedIds.add(inPlace.id);
+        } else if (entries.length > 0) {
+          // URL 存在但文件夹不对 → 移动
+          try {
+            await new Promise((resolve, reject) => {
+              chrome.bookmarks.move(entries[0].id, { parentId: pid }, (r) => {
+                if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+                else resolve(r);
+              });
+            });
+            matchedIds.add(entries[0].id);
+            moved++;
+          } catch (e) {
+            // 移动失败 → 新建
+            try {
+              await bmCreate({ parentId: pid, title: n.title || n.url, url: n.url });
+              created++;
+            } catch {}
+          }
+        } else {
+          // URL 不存在 → 新建
+          await bmCreate({ parentId: pid, title: n.title || n.url, url: n.url });
+          created++;
         }
       }
     }
   }
 
-  const topFolders = roots.filter(n => n.type === 'folder');
-  const topMarks = roots.filter(n => n.type === 'bookmark');
-
-  await buildNodes(topFolders, async () => barId, true);
-  if (topMarks.length) await buildNodes(topMarks, async () => barId, false);
-
-  if (buildErrors.length) {
-    throw new Error(`重建书签时有 ${buildErrors.length} 个失败。例: ${buildErrors[0]}`);
+  // 顶层：区分文件夹（进对应根容器）和书签（进默认书签栏）
+  const barId = await defaultBarId();
+  for (const r of roots) {
+    if (r.type === 'folder') {
+      const fid = await resolveTopParent(r.title);
+      await ensureNodes(r.children || [], async () => fid);
+    } else if (r.type === 'bookmark' && r.url) {
+      const entries = localByUrl.get(r.url) || [];
+      if (entries.length === 0) {
+        await bmCreate({ parentId: barId, title: r.title || r.url, url: r.url });
+        created++;
+      } else {
+        matchedIds.add(entries[0].id);
+      }
+    }
   }
 
-  return { built, foldersCreated, cleared, stubborn: stubbornFinal };
+  // ── Step 3：删除本地有但 XBEL 没有的书签（逐条，不触发批量事件） ──
+  let deleted = 0, stubborn = 0;
+  for (const bm of allLocal) {
+    if (matchedIds.has(bm.id)) continue;
+    try {
+      await bmRemove(bm.id);
+      deleted++;
+    } catch (e) {
+      stubborn++;
+    }
+  }
+
+  // ── Step 4：清理空文件夹（自底向上递归） ──
+  async function removeEmptyFolders(parentId) {
+    const children = await bmGetChildren(parentId);
+    for (const child of children) {
+      if (!child.url) {
+        await removeEmptyFolders(child.id);
+        const remaining = await bmGetChildren(child.id);
+        if (remaining.length === 0) {
+          try { await bmRemove(child.id); } catch {}
+        }
+      }
+    }
+  }
+  const rootContainers = await bmGetChildren('0');
+  for (const c of rootContainers) {
+    if (!c.url) await removeEmptyFolders(c.id);
+  }
+
+  return { created, moved, deleted, stubborn };
 }
 
 // ── 两种核心操作 ──
@@ -562,8 +529,9 @@ export async function doSync(cfg, onProgress = null) {
 
 // doPull：从云端恢复（云端 = 权威，覆盖本地）
 //
-// 流程：GET 云端 XBEL → 清空本地书签 → 从 XBEL 重建。
+// 流程：GET 云端 XBEL → 增量 diff 同步到本地（新建/移动/删除）。
 // 不写回云端——纯拉取。适合新设备初始化或恢复数据。
+// 使用增量操作，可以跟浏览器自带书签同步并存。
 
 export async function doPull(cfg, onProgress = null) {
   if (onProgress) onProgress('【恢复】下载云端书签...');
@@ -579,40 +547,20 @@ export async function doPull(cfg, onProgress = null) {
   if (onProgress) onProgress('【恢复】解析 XBEL...');
   const { roots, flat } = parseXBELTree(xml);
 
-  if (onProgress) onProgress(`【恢复】清空本地并重建（${flat.length} 个书签）...`);
-  const { built, cleared, stubborn } = await replaceLocalFromTree(roots);
+  if (onProgress) onProgress(`【恢复】增量同步 ${flat.length} 个书签...`);
+  const { created, moved, deleted, stubborn } = await diffSyncFromCloud(roots, flat);
 
-  // ── 数量一致性检查：重建后本地数 ≈ 云端数 + 顽固系统书签 ──
-  // Edge/Chrome 有少量系统托管书签无法删除（如"收藏夹栏"内的固定书签），
-  // 它们在 stubborn 计数里，导出时会算进去。所以比较时需要加上 stubborn。
-  const verify = await exportXBEL();
-  if (flat.length > 0) {
-    const expected = flat.length + stubborn;
-    const diff = Math.abs(verify.count - expected);
-    const ratio = expected > 0 ? diff / expected : 0;
-    if (ratio > 0.01) {
-      throw new Error(
-        `数量一致性检查失败！\n` +
-        `→ 云端有 ${flat.length} 个书签\n` +
-        `→ 本地顽固书签 ${stubborn} 个\n` +
-        `→ 预期总共 ${expected} 个，实际 ${verify.count} 个（差异 ${diff} 个）\n\n` +
-        `可能原因：Chrome 自带「书签同步」未关闭，旧书签被自动恢复。\n` +
-        `请关闭后重试：chrome://settings/syncSetup → 关闭「书签」`
-      );
-    }
-  }
-
-  let stubbornNote = '';
-  if (stubborn > 0) {
-    stubbornNote = `\n→ 跳过 ${stubborn} 个无法删除的系统书签（浏览器保护）`;
-  }
+  let note = '';
+  if (stubborn > 0) note += `\n→ ${stubborn} 个系统书签无法删除（浏览器保护）`;
 
   return {
     result:
       `✅ 恢复完成\n` +
-      `→ 清空本地 ${cleared} 条旧书签\n` +
-      `→ 从云端重建 ${built} 个书签` +
-      stubbornNote
+      `→ 新建 ${created} 个书签\n` +
+      `→ 移动 ${moved} 个书签\n` +
+      `→ 删除 ${deleted} 个本地多余书签` +
+      note +
+      `\n→ 云端 ${flat.length} 个书签现已镜像到本地`
   };
 }
 

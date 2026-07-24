@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "悟空书签同步xbel-ByWebdav",
-  "version": "0.3",
+  "version": "0.5",
   "description": "悟空书签同步xbel-ByWebdav - 使用XBEL格式通过WebDAV同步书签，支持123云盘等",
   "icons": {
     "16": "icons/icon16.png",
