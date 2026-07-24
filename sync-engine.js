@@ -13,7 +13,7 @@ const bgStorage = (typeof browser !== 'undefined' && browser.storage)
   ? browser.storage : chrome.storage;
 
 // ── 常量 ──
-const ENGINE_VERSION = '0.3';
+const ENGINE_VERSION = '0.4';
 export const LAST_SYNC_KEY = 'wukong_last_sync';
 export const LAST_SYNC_STATUS_KEY = 'wukong_last_sync_status';
 
@@ -404,22 +404,38 @@ export async function replaceLocalFromTree(roots) {
     }
   }
 
-  // ── 最终验证 ──
+  // ── 最终验证 + 第三轮逐条清理 ──
+  const stubborn = [];
   const containersFinal = await bmGetChildren('0');
   for (const c of containersFinal) {
     const children = await bmGetChildren(c.id);
     if (children.length > 0) {
-      const titles = children.slice(0, 5).map(ch => ch.title || '(未命名)').join(', ');
-      throw new Error(
-        `清空本地书签失败！容器 "${c.title}" 仍有 ${children.length} 条残留。\n` +
-        `前 5 条: ${titles}\n` +
-        `请关掉 Chrome 自带的「书签同步」功能后重试。`
-      );
+      // 第三轮：逐条尝试删除，每个单独 catch
+      for (const child of children) {
+        try {
+          await bmRemove(child.id);
+          cleared++;
+        } catch (e) {
+          // 删不掉的：记录，不阻塞
+          stubborn.push(`${child.title || '(未命名)'} [${c.title}]`);
+        }
+      }
     }
+  }
+
+  // 再验证一轮
+  let stubbornFinal = 0;
+  const containersRecheck = await bmGetChildren('0');
+  for (const c of containersRecheck) {
+    const children = await bmGetChildren(c.id);
+    stubbornFinal += children.length;
   }
 
   if (clearErrors.length) {
     console.warn('[悟空书签] 清空时有个别错误（已通过重试解决）:', clearErrors.join('; '));
+  }
+  if (stubborn.length > 0) {
+    console.warn(`[悟空书签] ${stubborn.length} 个系统书签无法删除（浏览器保护），已跳过:`, stubborn.slice(0, 5).join(', '));
   }
 
   // ── 第二步：从 XBEL 树重建 ──
@@ -475,7 +491,7 @@ export async function replaceLocalFromTree(roots) {
     throw new Error(`重建书签时有 ${buildErrors.length} 个失败。例: ${buildErrors[0]}`);
   }
 
-  return { built, foldersCreated, cleared };
+  return { built, foldersCreated, cleared, stubborn: stubbornFinal };
 }
 
 // ── 两种核心操作 ──
@@ -564,29 +580,39 @@ export async function doPull(cfg, onProgress = null) {
   const { roots, flat } = parseXBELTree(xml);
 
   if (onProgress) onProgress(`【恢复】清空本地并重建（${flat.length} 个书签）...`);
-  const { built, cleared } = await replaceLocalFromTree(roots);
+  const { built, cleared, stubborn } = await replaceLocalFromTree(roots);
 
-  // ── 数量一致性检查：重建后本地数 ≈ 云端数 ──
+  // ── 数量一致性检查：重建后本地数 ≈ 云端数 + 顽固系统书签 ──
+  // Edge/Chrome 有少量系统托管书签无法删除（如"收藏夹栏"内的固定书签），
+  // 它们在 stubborn 计数里，导出时会算进去。所以比较时需要加上 stubborn。
   const verify = await exportXBEL();
   if (flat.length > 0) {
-    const diff = Math.abs(verify.count - flat.length);
-    const ratio = diff / flat.length;
+    const expected = flat.length + stubborn;
+    const diff = Math.abs(verify.count - expected);
+    const ratio = expected > 0 ? diff / expected : 0;
     if (ratio > 0.01) {
       throw new Error(
         `数量一致性检查失败！\n` +
         `→ 云端有 ${flat.length} 个书签\n` +
-        `→ 本地重建后却有 ${verify.count} 个（差异 ${diff} 个）\n\n` +
+        `→ 本地顽固书签 ${stubborn} 个\n` +
+        `→ 预期总共 ${expected} 个，实际 ${verify.count} 个（差异 ${diff} 个）\n\n` +
         `可能原因：Chrome 自带「书签同步」未关闭，旧书签被自动恢复。\n` +
         `请关闭后重试：chrome://settings/syncSetup → 关闭「书签」`
       );
     }
   }
 
+  let stubbornNote = '';
+  if (stubborn > 0) {
+    stubbornNote = `\n→ 跳过 ${stubborn} 个无法删除的系统书签（浏览器保护）`;
+  }
+
   return {
     result:
       `✅ 恢复完成\n` +
       `→ 清空本地 ${cleared} 条旧书签\n` +
-      `→ 从云端重建 ${built} 个书签`
+      `→ 从云端重建 ${built} 个书签` +
+      stubbornNote
   };
 }
 
