@@ -2,13 +2,12 @@
 // 定时自动同步 + 状态记录（共享模式）
 
 import {
-  getStoredCfg, doSync,
+  getStoredCfg, doSync, doPull,
+  LAST_SYNC_KEY, LAST_SYNC_STATUS_KEY,
   getEngineVersion
 } from './sync-engine.js';
 
 const bgStorage = chrome.storage;
-const LAST_SYNC_KEY = 'wukong_last_sync';
-const LAST_SYNC_STATUS_KEY = 'wukong_last_sync_status';
 const SYNC_LOG_KEY = 'wukong_sync_log';
 
 // ── 安装时注册定时任务 ──

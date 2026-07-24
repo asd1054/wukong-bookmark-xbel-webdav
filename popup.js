@@ -3,7 +3,7 @@
 
 import {
   getStoredCfg, testConn,
-  doSync, doExport, doImport,
+  doSync, doPull,
   getEngineVersion
 } from './sync-engine.js';
 
@@ -24,8 +24,7 @@ const els = {
   save: document.getElementById('save'),
   test: document.getElementById('test'),
   sync: document.getElementById('sync'),
-  exp: document.getElementById('export'),
-  imp: document.getElementById('import'),
+  pull: document.getElementById('pull'),
 };
 
 // ── UI 辅助 ──
@@ -54,7 +53,7 @@ function setBtn(btn, loading, textOverride = null) {
 }
 
 function setAllBtns(disabled) {
-  [els.save, els.test, els.sync, els.exp, els.imp].forEach(b => {
+  [els.save, els.test, els.sync, els.pull].forEach(b => {
     if (b) b.disabled = disabled;
   });
 }
@@ -168,29 +167,23 @@ async function main() {
     });
   }
 
-  // ── 三个核心按钮 ──
+  // ── 两个核心按钮 ──
 
-  // 同步：拉取云端覆盖本地 → 推送本地回云端
+  // 同步到云端：本地覆盖云端
   bind(els.sync, async (cfg, progress) => {
     return await doSync(cfg, progress);
-  }, '同步');
+  }, '同步到云端');
 
-  // 推送：本地覆盖云端（整理好文件夹后用）
-  bind(els.exp, async (cfg, progress) => {
-    return await doExport(cfg, progress);
-  }, '推送本地到云端');
-
-  // 拉取：云端覆盖本地（新设备初始化用）
-  bind(els.imp, async (cfg, progress) => {
-    return await doImport(cfg, progress);
-  }, '从云端拉取');
+  // 从云端恢复：云端覆盖本地
+  bind(els.pull, async (cfg, progress) => {
+    return await doPull(cfg, progress);
+  }, '从云端恢复');
 
   console.log('%c[悟空书签] 所有按钮已绑定', 'color:green');
   setStatus(
     '就绪 v' + getEngineVersion() + ' — 共享模式\n' +
-    '• 日常跨设备 → 点「同步」\n' +
-    '• 整理文件夹后 → 点「推送本地到云端」\n' +
-    '• 新设备初始化 → 点「从云端拉取」',
+    '• 日常使用 → 点「同步到云端」\n' +
+    '• 新设备 / 恢复 → 点「从云端恢复」',
     null
   );
 }

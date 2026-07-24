@@ -53,15 +53,14 @@
   <div class="debug"><b>操作结果（保持弹窗不要关）：</b></div>
   <div id="status" class="status">等待操作。</div>
 
-  <button id="sync">同步（云端↔本地 双向对齐）</button>
-  <button id="export">推送本地到云端（整理文件夹后用）</button>
-  <button id="import">从云端拉取（新设备初始化用）</button>
+  <button id="sync">同步到云端（本地覆盖云端）</button>
+  <button id="pull">从云端恢复（云端覆盖本地）</button>
 
   <div class="debug">
-    <b>共享模式</b>：云端 XBEL 是唯一真相，所有浏览器都是它的镜像。<br>
-    • <b>同步</b>：先拉取云端覆盖本地，再推送本地回云端（日常用）<br>
-    • <b>推送</b>：以本地为准覆盖云端（整理文件夹后用）<br>
-    • <b>拉取</b>：以云端为准覆盖本地（新设备初始化用）<br>
+    <b>共享模式</b>：本地或云端，一端为权威，另一端为镜像。<br>
+    • <b>同步到云端</b>：以当前浏览器书签为准，覆盖云端<br>
+    • <b>从云端恢复</b>：从云端下载，覆盖当前浏览器书签<br>
+    • 安全阈值：本地不足云端 10% 时拒绝推送（防误删）<br>
     • 如需「合并模式」（多设备互相补缺、永不删除）请用 Floccus<br>
     • 请关掉 Chrome/Edge 自带书签同步、iCloud 书签，避免重复
   </div>
