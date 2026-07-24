@@ -6,27 +6,44 @@
     body { font: 14px sans-serif; width: 380px; padding: 12px; background: #f8f8f8; }
     input, button { width: 100%; margin: 5px 0; padding: 8px; font-size: 14px; box-sizing: border-box; }
     button { cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 4px; }
-    button:disabled { background: #999; }
-    .status { 
-      font-size: 13px; 
-      color: #222; 
-      white-space: pre-wrap; 
-      min-height: 90px; 
-      padding: 10px; 
-      border: 2px solid #ccc; 
-      border-radius: 6px; 
+    button:disabled { background: #999; cursor: not-allowed; }
+    button.danger { background: #f44336; }
+    .status {
+      font-size: 13px;
+      color: #222;
+      white-space: pre-wrap;
+      min-height: 90px;
+      padding: 10px;
+      border: 2px solid #ccc;
+      border-radius: 6px;
       background: #fff;
       margin-top: 8px;
       font-family: monospace;
+      word-break: break-all;
     }
     .status.success { border-color: #4caf50; background: #e8f5e9; }
     .status.error { border-color: #f44336; background: #ffebee; }
     .debug { font-size: 11px; color: #666; margin-top: 8px; }
-    h3 { margin-top: 0; }
+    h3 { margin-top: 0; margin-bottom: 4px; }
+    .version { font-size: 10px; color: #999; float: right; }
+    .mode-badge {
+      display: inline-block;
+      background: #ff8c00;
+      color: white;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
   </style>
 </head>
 <body>
-  <h3>悟空书签同步xbel-ByWebdav</h3>
+  <h3>
+    悟空书签同步xbel-ByWebdav
+    <span class="mode-badge">共享模式</span>
+    <span class="version" id="version"></span>
+  </h3>
   <input id="url" placeholder="完整文件路径 例如 https://webdav.123pan.cn/webdav/bookmarks.xbel">
   <input id="user" placeholder="用户名">
   <input id="pass" type="password" placeholder="密码">
@@ -36,17 +53,19 @@
   <div class="debug"><b>操作结果（保持弹窗不要关）：</b></div>
   <div id="status" class="status">等待操作。</div>
 
-  <button id="sync">立即同步</button>
-  <button id="export">仅导出到云</button>
-  <button id="import">仅从云导入</button>
+  <button id="sync">同步（云端↔本地 双向对齐）</button>
+  <button id="export">推送本地到云端（整理文件夹后用）</button>
+  <button id="import">从云端拉取（新设备初始化用）</button>
 
   <div class="debug">
-    • 默认已是 https://webdav.123pan.cn/webdav/bookmarks.xbel<br>
-    • 先在123云盘WebDAV手动创建一个 bookmarks.xbel 文件<br>
-    • 改完代码后必须 chrome://extensions 重新加载扩展<br>
-    • 点击同步后按钮会立刻变“处理中...”，状态框会更新<br>
-    • 想看详细日志：右键扩展图标 → 检查弹出式内容
+    <b>共享模式</b>：云端 XBEL 是唯一真相，所有浏览器都是它的镜像。<br>
+    • <b>同步</b>：先拉取云端覆盖本地，再推送本地回云端（日常用）<br>
+    • <b>推送</b>：以本地为准覆盖云端（整理文件夹后用）<br>
+    • <b>拉取</b>：以云端为准覆盖本地（新设备初始化用）<br>
+    • 如需「合并模式」（多设备互相补缺、永不删除）请用 Floccus<br>
+    • 请关掉 Chrome/Edge 自带书签同步、iCloud 书签，避免重复
   </div>
-  <script src="popup.js"></script>
+
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

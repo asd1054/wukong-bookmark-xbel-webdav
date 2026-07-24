@@ -1,15 +1,32 @@
 {
   "manifest_version": 3,
   "name": "悟空书签同步xbel-ByWebdav",
-  "version": "0.1",
+  "version": "0.3",
   "description": "悟空书签同步xbel-ByWebdav - 使用XBEL格式通过WebDAV同步书签，支持123云盘等",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": ["bookmarks", "storage", "alarms"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": ["https://*/*", "http://*/*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "悟空书签同步xbel-ByWebdav"
+    "default_title": "悟空书签同步xbel-ByWebdav",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "wukong-bookmark-xbel@webdav",
+      "strict_min_version": "109.0"
+    }
   }
 }
