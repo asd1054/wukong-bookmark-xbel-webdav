@@ -1,0 +1,21 @@
+{
+  "extName": { "message": "悟空书签同步 xbel-ByWebdav" },
+  "extDesc": { "message": "悟空书签同步xbel-ByWebdav - 使用XBEL格式通过WebDAV同步书签，支持端到端加密" },
+  "modeShared": { "message": "共享模式" },
+  "labelUrl": { "message": "完整文件路径（如 https://webdav.123pan.cn/webdav/bookmarks.xbel）" },
+  "labelUser": { "message": "用户名" },
+  "labelPass": { "message": "WebDAV 密码" },
+  "labelEncPass": { "message": "加密密码（可选，设置后云端数据将AES-256加密）" },
+  "labelScope": { "message": "同步范围" },
+  "optionAll": { "message": "全部书签" },
+  "btnSave": { "message": "保存配置（会自动测试连接）" },
+  "btnTest": { "message": "测试连接" },
+  "btnSync": { "message": "同步到云端（本地覆盖云端）" },
+  "btnPull": { "message": "从云端恢复（云端覆盖本地）" },
+  "btnExportCfg": { "message": "导出配置" },
+  "btnImportCfg": { "message": "导入配置" },
+  "resultTitle": { "message": "操作结果（保持弹窗不要关）：" },
+  "statusWaiting": { "message": "等待操作。" },
+  "statusReady": { "message": "就绪 — 共享模式\n• 日常使用 → 点「同步到云端」\n• 新设备 / 恢复 → 点「从云端恢复」" },
+  "footerInfo": { "message": "共享模式：本地或云端，一端为权威，另一端为镜像。\n• 同步到云端：以当前浏览器书签为准，覆盖云端\n• 从云端恢复：从云端下载，覆盖当前浏览器书签\n• 安全阈值：本地不足云端 10% 时拒绝推送（防误删）\n• 加密密码可选：设置后云端数据 AES-256-GCM 加密\n• 如需「合并模式」请用 Floccus\n• 可与浏览器自带书签同步共存（无需关掉）" }
+}

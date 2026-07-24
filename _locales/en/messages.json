@@ -1,0 +1,21 @@
+{
+  "extName": { "message": "Wukong Bookmark Sync xbel-ByWebdav" },
+  "extDesc": { "message": "Wukong Bookmark Sync xbel-ByWebdav - Sync bookmarks across browsers via WebDAV with XBEL format, supports E2E encryption" },
+  "modeShared": { "message": "Shared Mode" },
+  "labelUrl": { "message": "Full file path (e.g. https://webdav.123pan.cn/webdav/bookmarks.xbel)" },
+  "labelUser": { "message": "Username" },
+  "labelPass": { "message": "WebDAV Password" },
+  "labelEncPass": { "message": "Encryption Password (optional, enables AES-256-GCM encryption for cloud data)" },
+  "labelScope": { "message": "Sync Scope" },
+  "optionAll": { "message": "All Bookmarks" },
+  "btnSave": { "message": "Save Config (auto test connection)" },
+  "btnTest": { "message": "Test Connection" },
+  "btnSync": { "message": "Sync to Cloud (local → cloud)" },
+  "btnPull": { "message": "Restore from Cloud (cloud → local)" },
+  "btnExportCfg": { "message": "Export Config" },
+  "btnImportCfg": { "message": "Import Config" },
+  "resultTitle": { "message": "Operation Result (keep popup open):" },
+  "statusWaiting": { "message": "Waiting for action." },
+  "statusReady": { "message": "Ready — Shared Mode\n• Daily use → click 'Sync to Cloud'\n• New device → click 'Restore from Cloud'" },
+  "footerInfo": { "message": "Shared Mode: local or cloud, one side is the source of truth.\n• Sync to Cloud: push local bookmarks to cloud\n• Restore from Cloud: pull cloud bookmarks to local\n• Safety threshold: reject push if local < 10% of cloud\n• Encryption optional: AES-256-GCM if encryption password set\n• Use Floccus if you need 'Merge Mode'\n• Works alongside browser's native bookmark sync" }
+}

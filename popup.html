@@ -3,16 +3,20 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { font: 14px sans-serif; width: 380px; padding: 12px; background: #f8f8f8; }
-    input, button { width: 100%; margin: 5px 0; padding: 8px; font-size: 14px; box-sizing: border-box; }
+    body { font: 14px sans-serif; width: 400px; padding: 12px; background: #f8f8f8; }
+    input, select, button { width: 100%; margin: 5px 0; padding: 8px; font-size: 14px; box-sizing: border-box; }
     button { cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 4px; }
     button:disabled { background: #999; cursor: not-allowed; }
     button.danger { background: #f44336; }
+    button.small { width: auto; padding: 6px 12px; font-size: 12px; display: inline-block; }
+    .btn-row { display: flex; gap: 4px; }
+    .btn-row button { flex: 1; font-size: 12px; padding: 6px 4px; }
+    .btn-row button.small { flex: 0 1 auto; }
     .status {
       font-size: 13px;
       color: #222;
       white-space: pre-wrap;
-      min-height: 90px;
+      min-height: 80px;
       padding: 10px;
       border: 2px solid #ccc;
       border-radius: 6px;
@@ -24,7 +28,7 @@
     .status.success { border-color: #4caf50; background: #e8f5e9; }
     .status.error { border-color: #f44336; background: #ffebee; }
     .debug { font-size: 11px; color: #666; margin-top: 8px; }
-    h3 { margin-top: 0; margin-bottom: 4px; }
+    h3 { margin-top: 0; margin-bottom: 4px; font-size: 15px; }
     .version { font-size: 10px; color: #999; float: right; }
     .mode-badge {
       display: inline-block;
@@ -36,33 +40,68 @@
       vertical-align: middle;
       margin-left: 4px;
     }
+    .enc-badge {
+      display: inline-block;
+      background: #2196F3;
+      color: white;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+    details { margin-top: 8px; }
+    details summary { cursor: pointer; font-size: 12px; color: #666; }
+    label { font-size: 12px; color: #666; display: block; margin-top: 4px; }
+    .lang-switch { float: right; font-size: 11px; cursor: pointer; color: #999; margin-left: 8px; }
+    .lang-switch:hover { color: #333; }
   </style>
 </head>
 <body>
   <h3>
-    悟空书签同步xbel-ByWebdav
-    <span class="mode-badge">共享模式</span>
+    <span id="extTitle">悟空书签同步xbel-ByWebdav</span>
+    <span class="mode-badge" data-i18n="modeShared">共享模式</span>
+    <span class="lang-switch" id="langSwitch" title="Switch to English">EN</span>
     <span class="version" id="version"></span>
   </h3>
-  <input id="url" placeholder="完整文件路径 例如 https://webdav.123pan.cn/webdav/bookmarks.xbel">
-  <input id="user" placeholder="用户名">
-  <input id="pass" type="password" placeholder="密码">
-  <button id="save">保存配置（会自动测试连接）</button>
-  <button id="test">测试连接</button>
 
-  <div class="debug"><b>操作结果（保持弹窗不要关）：</b></div>
-  <div id="status" class="status">等待操作。</div>
+  <input id="url" data-i18n-placeholder="labelUrl" placeholder="完整文件路径 例如 https://webdav.123pan.cn/webdav/bookmarks.xbel">
+  <input id="user" data-i18n-placeholder="labelUser" placeholder="用户名">
+  <input id="pass" type="password" data-i18n-placeholder="labelPass" placeholder="WebDAV 密码">
 
-  <button id="sync">同步到云端（本地覆盖云端）</button>
-  <button id="pull">从云端恢复（云端覆盖本地）</button>
+  <details>
+    <summary>高级选项</summary>
+    <input id="encPass" type="password" data-i18n-placeholder="labelEncPass" placeholder="加密密码（可选，AES-256-GCM）">
+    <label data-i18n="labelScope">同步范围</label>
+    <select id="scope">
+      <option value="" data-i18n="optionAll">全部书签</option>
+    </select>
+  </details>
 
-  <div class="debug">
-    <b>共享模式</b>：本地或云端，一端为权威，另一端为镜像。<br>
-    • <b>同步到云端</b>：以当前浏览器书签为准，覆盖云端<br>
-    • <b>从云端恢复</b>：从云端下载，覆盖当前浏览器书签<br>
-    • 安全阈值：本地不足云端 10% 时拒绝推送（防误删）<br>
-    • 如需「合并模式」（多设备互相补缺、永不删除）请用 Floccus<br>
-    • 请关掉 Chrome/Edge 自带书签同步、iCloud 书签，避免重复
+  <div class="btn-row">
+    <button id="save" data-i18n="btnSave">保存配置（会自动测试连接）</button>
+    <button id="test" class="small" data-i18n="btnTest">测试连接</button>
+  </div>
+
+  <div class="debug"><b data-i18n="resultTitle">操作结果（保持弹窗不要关）：</b></div>
+  <div id="status" class="status" data-i18n="statusWaiting">等待操作。</div>
+
+  <button id="sync" data-i18n="btnSync">同步到云端（本地覆盖云端）</button>
+  <button id="pull" data-i18n="btnPull">从云端恢复（云端覆盖本地）</button>
+
+  <div class="btn-row">
+    <button id="exportCfg" class="small" data-i18n="btnExportCfg">导出配置</button>
+    <button id="importCfg" class="small" data-i18n="btnImportCfg">导入配置</button>
+  </div>
+
+  <div class="debug" data-i18n="footerInfo" style="white-space:pre-wrap">
+    共享模式：本地或云端，一端为权威，另一端为镜像。
+    • 同步到云端：以当前浏览器书签为准，覆盖云端
+    • 从云端恢复：从云端下载，覆盖当前浏览器书签
+    • 安全阈值：本地不足云端 10% 时拒绝推送（防误删）
+    • 加密密码可选：设置后云端数据 AES-256-GCM 加密
+    • 如需「合并模式」请用 Floccus
+    • 可与浏览器自带书签同步共存（无需关掉）
   </div>
 
   <script type="module" src="popup.js"></script>
